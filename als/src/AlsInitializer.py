@@ -7,14 +7,18 @@ class AlsInitializer:
         pass
     
     @staticmethod
-    def assert_input_values(data:pd.DataFrame, user_col:str, item_col:str, allowed_interactions:np.array, input_interaction:str, lambda_u:float, lambda_i:float, 
-                            initial_U:np.array, initial_V:np.array, dim:int):
+    def assert_input_values(data:pd.DataFrame, user_col:str, item_col:str, value_col:str, allowed_interactions:np.array, input_interaction:str, lambda_u:float, lambda_i:float, 
+                            initial_U:np.array, initial_V:np.array, dim:int, njobs:int):
         
         # Checks if specified interaction type is allowed
         if input_interaction not in allowed_interactions:
             raise AssertionError('Interaction type \'{}\' not allowed. Possible options are: {}'\
                         .format(input_interaction,
                                 ','.join(['\''+x+'\'' for x in allowed_interactions])))
+
+        # If interaction type is ratings, column in which ratings are given must be specified
+        if input_interaction=='rating' and value_col is None:
+            raise AssertionError('Interaction type \'rating\' demands specifying column which stores user ratings for items.')
 
         # If initial_U or initial_V are specified, checks if embedding dimensions match the one specified in dim and if
         # number of unique users and items are the same as in data
@@ -63,23 +67,29 @@ class AlsInitializer:
 
 
     @classmethod
-    def create_user_item_correspondence(cls, data:pd.DataFrame, user_col:str, item_col:str, interaction_type:str):
+    def create_user_item_correspondence(cls, data:pd.DataFrame, user_col:str, item_col:str, value_col:str, interaction_type:str):
         """
         
         """
-        # Creates aggregation function according to interaction_type
-        if interaction_type=='n_interactions':
-            aggregation_fn = lambda x:x.shape[0]
-        elif interaction_type=='has_interacted':
-            aggregation_fn = lambda x:1
+        # 
+        if interaction_type=='rating':
+            user_item_corr = data.copy(deep=True)
+            del data
 
-        # Aggregates
-        data['agg_col'] = np.nan
-        user_item_corr = data.groupby(by=[user_col,item_col],as_index=False)\
-                             .agg({'agg_col':aggregation_fn})\
-                             .rename(columns={'agg_col':'interaction'})\
-                             .reset_index(drop=True)
-        del data
+        elif interaction_type in ['n_interactions','has_interacted']:
+            # Creates aggregation function according to interaction_type
+            if interaction_type=='n_interactions':
+                aggregation_fn = lambda x:x.shape[0]
+            elif interaction_type=='has_interacted':
+                aggregation_fn = lambda x:1
+
+            # Aggregates
+            data['agg_col'] = np.nan
+            user_item_corr = data.groupby(by=[user_col,item_col],as_index=False)\
+                                .agg({'agg_col':aggregation_fn})\
+                                .rename(columns={'agg_col':'interaction'})\
+                                .reset_index(drop=True)
+            del data
 
         # Creates then applies user and item mappings
         user_item_corr, user_map, item_map = cls.__create_id_mappings(
@@ -90,11 +100,16 @@ class AlsInitializer:
             unique_items=user_item_corr[item_col].unique()
         )
          
-
-        # Standardizes user and item column names for later steps
-        user_item_corr = user_item_corr.rename(columns={user_col:'user',
-                                                        item_col:'item'})
-
+        # Standardizes user-item interaction matrix's column names for later steps
+        if interaction_type=='rating':
+            user_item_corr=user_item_corr.rename(
+                columns={user_col:'user',
+                         item_col:'item',
+                         value_col:'interaction'}
+            )
+        elif interaction_type in ['n_interactions','has_interacted']:
+            user_item_corr = user_item_corr.rename(columns={user_col:'user',
+                                                            item_col:'item'})
         return user_item_corr, user_map, item_map
 
 

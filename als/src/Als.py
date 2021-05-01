@@ -1,12 +1,12 @@
 import pandas as pd
 import numpy as np
+import pickle
 
 from .AlsSolver import AlsSolver
 from .AlsInitializer import AlsInitializer
 
 
 # TODO: parallel execution
-# TODO: analyze embeddings
 # TODO: logging
 
 class Als:
@@ -47,66 +47,32 @@ class Als:
         return data[item_col].nunique()
 
 
-    def fit(self, data:pd.DataFrame, user_col:str, item_col:str, dim:int=10, interaction_type:str='n_interactions', lambda_u:int=0, lambda_i:int=0,
-            initial_U:np.array=None, initial_V:np.array=None, tol:float=0.1):
-        
-        # Asserts inputs and initializes vars
-        U, V, user_map, item_map = self.__initialize_als(
-            data=data,
-            user_col=user_col,
-            item_col=item_col,
-            dim=dim,
-            interaction_type=interaction_type,
-            lambda_u=lambda_u,
-            lambda_i=lambda_i,
-            initial_U=initial_U,
-            initial_V=initial_V
-        )
+    
 
 
-        # Runs ALS algorithm
-        U, V, mse = self.__run_als(
-            ui_corr=self.__R,
-            U=U,
-            V=V,
-            dim=dim,
-            lambda_u=lambda_u,
-            lambda_i=lambda_i,
-            tol=tol
-        )
-        self.__mse = mse
-
-        # Formats attributes (embeddings and user-item interaction)
-        self.__format_attributes(
-            U=U,
-            V=V,
-            user_map=user_map,
-            item_map=item_map,
-            user_col=user_col,
-            item_col=item_col
-        )
-
-
-    def __initialize_als(self, data:pd.DataFrame, user_col:str, item_col:str, dim:int, interaction_type:str, lambda_u:int, lambda_i:int,
-                         initial_U:np.array,initial_V:np.array):
+    def __initialize_als(self, data:pd.DataFrame, user_col:str, item_col:str, value_col:str, dim:int, interaction_type:str, lambda_u:int, lambda_i:int,
+                         initial_U:np.array,initial_V:np.array, njobs:int):
                 
         # Applies verifications to input values
         AlsInitializer.assert_input_values(
             data=data,
             user_col=user_col,
             item_col=item_col,
-            allowed_interactions=['n_interactions','has_interacted'],
+            value_col=value_col,
+            allowed_interactions=['n_interactions','has_interacted','rating'],
             input_interaction=interaction_type,
             initial_U=initial_U,
             initial_V=initial_V,
             dim=dim,
             lambda_u=lambda_u,
             lambda_i=lambda_i,
+            njobs=njobs
         )
 
         # Gets user-item interaction
         self.__R, user_map, item_map = AlsInitializer.create_user_item_correspondence(data=data,                                                                                    user_col=user_col,
                                                                                       item_col=item_col,
+                                                                                      value_col=value_col,
                                                                                       interaction_type=interaction_type)
 
         # Initializes embeddings
@@ -121,7 +87,7 @@ class Als:
         return U, V, user_map, item_map
 
 
-    def __run_als(self, ui_corr:pd.DataFrame, U:np.array, V:np.array, dim:int,lambda_u:int, lambda_i:int, tol:float):
+    def __run_als(self, ui_corr:pd.DataFrame, U:np.array, V:np.array, dim:int,lambda_u:int, lambda_i:int, tol:float, njobs:int):
         
         # Creates solver and starts ALS
         solver = AlsSolver(
@@ -130,7 +96,9 @@ class Als:
             V=V,
             lambda_u=lambda_u,
             lambda_i=lambda_i,
-            tol=tol
+            tol=tol,
+            njobs=njobs
+
         )
         U, V, mse = solver.solve()
 
@@ -154,9 +122,68 @@ class Als:
         self.__R['item'] = self.__R['item'].map(inv_item_map)
         self.__R = self.__R.drop(columns=['interaction_predict','err'])\
                            .rename(columns={'user':user_col,'item':item_col})
+
+
+    def __save_embeddings(self, U:np.array, V:np.array, export_dir:str):
+
+            if export_dir[-1]!='/':
+                export_dir = export_dir+'/'
+
+            with open(export_dir+'user_embedding.pkl','wb') as file:
+                pickle.dump(self.__user_embedding,file)
+            with open(export_dir+'item_embedding.pkl','wb') as file:
+                pickle.dump(self.__item_embedding,file)
+
+
+    def fit(self, data:pd.DataFrame, user_col:str, item_col:str, value_col:str=None, dim:int=10, interaction_type:str='n_interactions', lambda_u:int=0, lambda_i:int=0,
+            initial_U:np.array=None, initial_V:np.array=None, tol:float=0.1, njobs=1, export_dir=None):
         
+        # Asserts inputs and initializes vars
+        U, V, user_map, item_map = self.__initialize_als(
+            data=data,
+            user_col=user_col,
+            item_col=item_col,
+            value_col=value_col,
+            dim=dim,
+            interaction_type=interaction_type,
+            lambda_u=lambda_u,
+            lambda_i=lambda_i,
+            initial_U=initial_U,
+            initial_V=initial_V,
+            njobs=njobs
+        )
+
+
+        # Runs ALS algorithm
+        U, V, mse = self.__run_als(
+            ui_corr=self.__R,
+            U=U,
+            V=V,
+            dim=dim,
+            lambda_u=lambda_u,
+            lambda_i=lambda_i,
+            tol=tol,
+            njobs=njobs
+        )
+        self.__mse = mse
+
+        # Formats attributes (embeddings and user-item interaction)
+        self.__format_attributes(
+            U=U,
+            V=V,
+            user_map=user_map,
+            item_map=item_map,
+            user_col=user_col,
+            item_col=item_col
+        )
         
-     
+        # If export directory is provided, save embeddings to directory
+        if export_dir is not None:
+            self.__save_embeddings(
+                U=U,
+                V=V,
+                export_dir=export_dir
+            )
 
 
             
