@@ -5,6 +5,12 @@ from pathos.pools import ProcessPool
 
 
 class AlsSolver:
+    
+    """
+        This class is responsible for executing the ALS algorithm and optimizing item and user embeddings.
+    
+    """
+    
 
     def __init__(self, R:np.array, U:np.array, V:np.array, tol:float, lambda_u:float, lambda_i:float, njobs:int):
                 
@@ -24,13 +30,8 @@ class AlsSolver:
         if self.run_parallel:
             self.__create_parallel_splits()
 
-
-    def __format_matrices(self):
-        pass
-
-    
+            
     def __solve_users(self,U:np.array, V:np.array, R:np.array):
-        # import pdb;pdb.set_trace()
         users = R['user'].sort_values(ascending=True).unique()
         U_new = []
         # Let's iterate over our users
@@ -150,20 +151,16 @@ class AlsSolver:
 
     def __solve_iter(self):
         
-        print('Solving users..')
         self.U = self.__solve_users(
             U=self.U,
             V=self.V,
             R=self.R
         )
-        print('Done')
-        print('Solving items..')
         self.V = self.__solve_items(
             U=self.U,
             V=self.V,
             R=self.R
         )
-        print('Done')
 
 
     def __create_parallel_splits(self):
@@ -217,7 +214,6 @@ class AlsSolver:
     def __solve_iter_parallel(self):
 
         def solve_users_parallel(split:ParallelSplit):
-
             U_new = self.__solve_users(
                 U=split.embs,
                 V=self.V,
@@ -238,7 +234,6 @@ class AlsSolver:
         pool = ProcessPool(nodes=self.njobs)
 
         # Let's process and update user embeddings
-        print('Solving users..')
         U_splits = pool.map(solve_users_parallel, self.U_split)
         U_new = np.empty(shape=(0,self.k))
         for u_split in U_splits:
@@ -247,10 +242,8 @@ class AlsSolver:
                 (U_new, u_split.embs)
             )
         self.U = U_new
-        print('Done')
 
         # Let's process and update item embeddings
-        print('Solving items..')
         V_splits = pool.map(solve_items_parallel, self.V_split)
         V_new = np.empty(shape=(0,self.k))
         for v_split in V_splits:
@@ -259,7 +252,6 @@ class AlsSolver:
                 (V_new, v_split.embs)
             )
         self.V = V_new
-        print('Done')
 
         # Updates splits
         self.U_split = U_splits
@@ -267,7 +259,11 @@ class AlsSolver:
 
 
     def solve(self):
+        """
+            This method is the entrypoint for the class and executes the ALS
+            algorithm as specified by user inputs.
         
+        """
         mse = []
         new_mse=self.__calculate_error()
         previous_mse = 2*new_mse
@@ -275,8 +271,6 @@ class AlsSolver:
         start_time = time.time()
         new_time = start_time
         while abs(new_mse-previous_mse)/previous_mse > self.tol:
-            print('-'*100)
-            print('== ITERATION {} =='.format(n))
             
             if not self.run_parallel:
                 self.__solve_iter()
@@ -284,25 +278,22 @@ class AlsSolver:
                 self.__solve_iter_parallel()
             
             previous_mse = new_mse
-            print('Calculating prediction error..')
             new_mse = self.__calculate_error()
-            print('Done')
-            print('MSE: {}'.format(round(new_mse,3)))
             mse.append(new_mse)
             n+=1
             previous_time = new_time
             new_time = time.time()
-            print('Total elapsed time: {}s'.format(round(new_time-start_time,1)))
-            print('Time in this iteration: {}s'.format(round(new_time-previous_time,1)))
-
-        print('-'*100)
 
         return self.U, self.V, np.array(mse)
  
 
 
 class ParallelSplit:
-
+    """
+        This is an auxiliary class which represents a user or item split for distributed execution. Each job will take as input 
+        an individual ParallelSplit object.
+    
+    """
     def __init__(self, R:pd.DataFrame, embs:np.array, order:int):
         self.R=R
         self.embs=embs
