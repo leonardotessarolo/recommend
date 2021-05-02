@@ -6,11 +6,14 @@ from .AlsSolver import AlsSolver
 from .AlsInitializer import AlsInitializer
 
 
-# TODO: parallel execution
-# TODO: logging
-
 class Als:
-
+    
+    """
+        Top-level class for executing ALS algorithm. Calls AlsInitializer for setup and AlsSolver for executing optimization. Entry-point method is fit().
+        
+    """
+    
+    
     def __init__(self):
         self.__R = None
         self.__user_embedding = None
@@ -135,8 +138,62 @@ class Als:
                 pickle.dump(self.__item_embedding,file)
 
 
-    def fit(self, data:pd.DataFrame, user_col:str, item_col:str, value_col:str=None, dim:int=10, interaction_type:str='n_interactions', lambda_u:int=0, lambda_i:int=0,
-            initial_U:np.array=None, initial_V:np.array=None, tol:float=0.1, njobs=1, export_dir=None):
+    def fit(
+        self,
+        data:pd.DataFrame, 
+        user_col:str, 
+        item_col:str, 
+        value_col:str=None, 
+        dim:int=10, 
+        interaction_type:str='n_interactions', 
+        lambda_u:float=0, 
+        lambda_i:float=0,
+        initial_U:np.array=None, 
+        initial_V:np.array=None, 
+        tol:float=0.1, 
+        njobs:int=1, 
+        export_dir:str=None
+    ):
+        
+        """
+            Entry point for executing the ALS algorithm.
+            INPUTS:
+            
+                - data (pandas DataFrame): user-item interaction matrix in the form [user_col, item_col, interaction_col].
+                
+                - user_col (str): column with user ids in data.
+                
+                - user_col (str): column with item ids in data.
+                
+                - value_col (str): column with interaction values. 
+                
+                - dim (int): embedding dimension. Returned user and item embeddings will be 1-D arrays 
+                of size dim.
+                
+                - interaction_type (str): type of interaction between users and items upon which to create embeddings. This is not 
+                necessarily the kind of interaction portrayed in <data>, but how the algorithm will process the input user-item
+                interaction matrix. Currently supports three kinds of interaction_types:
+                    - n_interactions: algorithm will count how many user-item interaction events are present in <data>.
+                    - has_interacted: algorithm will check whether a user-item interaction is present in <data> or not.
+                    - rating: algorithm will consider a score a user gives an item. For this mode of operation, user-item
+                    interaction matrix <data> must already contain ratings in <value_col>.
+                    
+                -lambda_u (float or double): regularization coefficient for user embeddings.
+                -lambda_i (float or double): regularization coefficient for item embeddings.
+                
+                -initial_U (array-type): initial embedding for users. Must be a 1-D array with <dim> elements. If not specified, will be initialized
+                internally with random values from standard normal distribution.
+                -initial_i (array-type): initial embedding for items. Must be a 1-D array with <dim> elements. If not specified, will be initialized
+                internally with random values from standard normal distribution.
+                
+                - tol (float): error tolerance for concluding optimization. For example, if tol=0.1, algorithm will execute until an iteration reduces mse
+                in less than 10% wrt to previous iteration mse.
+                
+                - njobs (int): number of parallel jobs to execute optimization with.
+                
+                - export_dir (str): directory to which user and item embeddings will be exported. If not specified, will not export.
+        
+        """
         
         # Asserts inputs and initializes vars
         U, V, user_map, item_map = self.__initialize_als(
