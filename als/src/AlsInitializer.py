@@ -3,8 +3,6 @@ import numpy as np
 
 class AlsInitializer:
 
-    def __init__(self):
-        pass
     
     @staticmethod
     def assert_input_values(data:pd.DataFrame, user_col:str, item_col:str, value_col:str, allowed_interactions:np.array, input_interaction:str, lambda_u:float, lambda_i:float, 
@@ -68,10 +66,13 @@ class AlsInitializer:
 
     @classmethod
     def create_user_item_correspondence(cls, data:pd.DataFrame, user_col:str, item_col:str, value_col:str, interaction_type:str):
-        """
         
         """
-        # 
+            The Als class takes as input the user-item interaction matrix. This method formats it as to correspond to the specific
+            interaction desired: rating, number of interactions or if the user has interacted with the item or not.
+        
+        """
+        
         if interaction_type=='rating':
             user_item_corr = data.copy(deep=True)
             del data
@@ -115,7 +116,11 @@ class AlsInitializer:
 
     @staticmethod
     def initialize_embeddings(n_users:int, n_items:int, dim:int, initial_U:np.array, initial_V:np.array):
+        """
+            When embeddings are not given by the user, they are initialized by this method. Standard
+            normal distributions are used.
         
+        """
         if initial_U is None:
             U = np.random.normal(
                 loc=0,
